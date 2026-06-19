@@ -1,6 +1,43 @@
 import { create } from "zustand";
 import type { Topic, DutyRecord, FilterParams, DashboardStats } from "@/types";
-import { mockTopics, mockDutyRecords } from "@/data/mockData";
+import { mockTopics as rawMockTopics, mockDutyRecords } from "@/data/mockData";
+
+const adjustDatesToRecent = () => {
+  const now = new Date();
+  const originalLatest = new Date("2024-01-15T14:30:00");
+  const offsetMs = now.getTime() - originalLatest.getTime();
+
+  const shiftDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return new Date(d.getTime() + offsetMs).toISOString();
+  };
+
+  return rawMockTopics.map((topic) => ({
+    ...topic,
+    updatedAt: shiftDate(topic.updatedAt),
+    articleSummaries: topic.articleSummaries.map((a) => ({
+      ...a,
+      publishTime: shiftDate(a.publishTime),
+    })),
+    eventTimeline: topic.eventTimeline.map((e) => {
+      const d = new Date(e.time);
+      return {
+        ...e,
+        time: new Date(d.getTime() + offsetMs).toISOString().slice(0, 10),
+      };
+    }),
+  }));
+};
+
+const mockTopics = adjustDatesToRecent();
+
+const regionMap: Record<string, string[]> = {
+  global: ["全球"],
+  "asia-pacific": ["亚太"],
+  europe: ["欧洲"],
+  "north-america": ["北美"],
+  "europe-america": ["欧美"],
+};
 
 interface DashboardState {
   topics: Topic[];
@@ -14,7 +51,7 @@ interface DashboardState {
   setDetailModalOpen: (open: boolean) => void;
   setFilterParams: (params: Partial<FilterParams>) => void;
   resetFilters: () => void;
-  addDutyRecord: (record: Omit<DutyRecord, "id" | "createdAt" | "status">) => void;
+  addDutyRecord: (record: Omit<DutyRecord, "id" | "createdAt" | "status">) => boolean;
   updateRecordStatus: (id: string, status: DutyRecord["status"]) => void;
   computeStats: () => void;
   getFilteredTopics: () => Topic[];
@@ -54,13 +91,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set((state) => ({
       filterParams: { ...state.filterParams, ...params },
     }));
+    setTimeout(() => get().computeStats(), 0);
   },
 
   resetFilters: () => {
     set({ filterParams: initialFilterParams });
+    setTimeout(() => get().computeStats(), 0);
   },
 
   addDutyRecord: (record) => {
+    if (!record.topicId || !record.topicTitle || !record.opinion.trim() || !record.department) {
+      return false;
+    }
     const newRecord: DutyRecord = {
       ...record,
       id: `r${Date.now()}`,
@@ -70,6 +112,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set((state) => ({
       dutyRecords: [newRecord, ...state.dutyRecords],
     }));
+    return true;
   },
 
   updateRecordStatus: (id, status) => {
@@ -104,13 +147,24 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   getFilteredTopics: () => {
     const { topics, filterParams } = get();
+    const now = new Date();
+
+    const timeRangeMs: Record<string, number> = {
+      "24h": 24 * 60 * 60 * 1000,
+      "7d": 7 * 24 * 60 * 60 * 1000,
+      "30d": 30 * 24 * 60 * 60 * 1000,
+      "90d": 90 * 24 * 60 * 60 * 1000,
+    };
+    const cutoffTime = now.getTime() - (timeRangeMs[filterParams.timeRange] || 0);
+
     return topics.filter((topic) => {
-      if (
-        filterParams.region !== "all" &&
-        !topic.region.toLowerCase().includes(filterParams.region.replace("-", ""))
-      ) {
-        return false;
+      if (filterParams.region !== "all") {
+        const allowedRegions = regionMap[filterParams.region] || [];
+        if (!allowedRegions.includes(topic.region)) {
+          return false;
+        }
       }
+
       if (filterParams.language !== "all") {
         const langMap: Record<string, string[]> = {
           english: ["英语"],
@@ -125,6 +179,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           return false;
         }
       }
+
+      if (filterParams.timeRange !== "90d") {
+        const topicTime = new Date(topic.updatedAt).getTime();
+        if (topicTime < cutoffTime) {
+          return false;
+        }
+      }
+
       return true;
     });
   },

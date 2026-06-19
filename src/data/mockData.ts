@@ -319,7 +319,7 @@ export const mockTopics: Topic[] = [
         id: "acc8",
         name: "Clean Energy News",
         platform: "YouTube",
-        subscribers: 1200000,
+        followers: 1200000,
         postCount: 230,
         influence: 80,
       },
