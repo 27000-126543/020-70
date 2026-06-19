@@ -9,6 +9,7 @@ import { AccountList } from "@/components/TopicDetailModal/AccountList";
 import { NarrativeSection } from "@/components/TopicDetailModal/NarrativeSection";
 import { TimelineSection } from "@/components/TopicDetailModal/TimelineSection";
 import { OpinionForm } from "@/components/DisposalRecord/OpinionForm";
+import { HeatTrendChart } from "@/components/TopicDetailModal/HeatTrendChart";
 import { formatNumber, formatDateTime } from "@/utils/format";
 
 type TabType = "articles" | "accounts" | "narratives" | "timeline" | "disposal";
@@ -126,7 +127,10 @@ export function TopicDetailModal() {
           )}
 
           {activeTab === "articles" && (
-            <ArticleList articles={selectedTopic.articleSummaries} />
+            <div className="space-y-5">
+              <HeatTrendChart data={selectedTopic.heatTrend} />
+              <ArticleList articles={selectedTopic.articleSummaries} />
+            </div>
           )}
           {activeTab === "accounts" && (
             <AccountList accounts={selectedTopic.spreadAccounts} />

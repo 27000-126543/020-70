@@ -1,35 +1,6 @@
 import { create } from "zustand";
 import type { Topic, DutyRecord, FilterParams, DashboardStats } from "@/types";
-import { mockTopics as rawMockTopics, mockDutyRecords } from "@/data/mockData";
-
-const adjustDatesToRecent = () => {
-  const now = new Date();
-  const originalLatest = new Date("2024-01-15T14:30:00");
-  const offsetMs = now.getTime() - originalLatest.getTime();
-
-  const shiftDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return new Date(d.getTime() + offsetMs).toISOString();
-  };
-
-  return rawMockTopics.map((topic) => ({
-    ...topic,
-    updatedAt: shiftDate(topic.updatedAt),
-    articleSummaries: topic.articleSummaries.map((a) => ({
-      ...a,
-      publishTime: shiftDate(a.publishTime),
-    })),
-    eventTimeline: topic.eventTimeline.map((e) => {
-      const d = new Date(e.time);
-      return {
-        ...e,
-        time: new Date(d.getTime() + offsetMs).toISOString().slice(0, 10),
-      };
-    }),
-  }));
-};
-
-const mockTopics = adjustDatesToRecent();
+import { mockTopics, mockDutyRecords } from "@/data/mockData";
 
 const regionMap: Record<string, string[]> = {
   global: ["全球"],
@@ -60,7 +31,8 @@ interface DashboardState {
 const initialFilterParams: FilterParams = {
   region: "all",
   language: "all",
-  timeRange: "24h",
+  timeRange: "all",
+  drillDown: "",
 };
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
@@ -124,20 +96,16 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   computeStats: () => {
-    const { getFilteredTopics } = get();
-    const filteredTopics = getFilteredTopics();
-    const risingTopics = filteredTopics.filter(
-      (t) => t.trend === "rising"
-    ).length;
-    const highRiskTopics = filteredTopics.filter(
-      (t) => t.riskLevel === "high"
-    ).length;
+    const { getFilteredTopics, filterParams } = get();
+    const baseTopics = getFilteredTopics();
+    const risingTopics = baseTopics.filter((t) => t.trend === "rising").length;
+    const highRiskTopics = baseTopics.filter((t) => t.riskLevel === "high").length;
     const allSources = new Set<string>();
-    filteredTopics.forEach((t) => t.sources.forEach((s) => allSources.add(s)));
+    baseTopics.forEach((t) => t.sources.forEach((s) => allSources.add(s)));
 
     set({
       stats: {
-        totalTopics: filteredTopics.length,
+        totalTopics: baseTopics.length,
         risingTopics,
         highRiskTopics,
         sourceCount: allSources.size,
@@ -153,9 +121,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       "24h": 24 * 60 * 60 * 1000,
       "7d": 7 * 24 * 60 * 60 * 1000,
       "30d": 30 * 24 * 60 * 60 * 1000,
-      "90d": 90 * 24 * 60 * 60 * 1000,
     };
-    const cutoffTime = now.getTime() - (timeRangeMs[filterParams.timeRange] || 0);
+
+    const cutoffTime = filterParams.timeRange !== "all"
+      ? now.getTime() - (timeRangeMs[filterParams.timeRange] || 0)
+      : 0;
 
     return topics.filter((topic) => {
       if (filterParams.region !== "all") {
@@ -180,11 +150,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         }
       }
 
-      if (filterParams.timeRange !== "90d") {
+      if (filterParams.timeRange !== "all") {
         const topicTime = new Date(topic.updatedAt).getTime();
         if (topicTime < cutoffTime) {
           return false;
         }
+      }
+
+      if (filterParams.drillDown === "rising" && topic.trend !== "rising") {
+        return false;
+      }
+      if (filterParams.drillDown === "highRisk" && topic.riskLevel !== "high") {
+        return false;
       }
 
       return true;

@@ -39,6 +39,13 @@ export interface TimelineEvent {
   type: EventType;
 }
 
+export interface HeatTrendPoint {
+  time: string;
+  heat: number;
+  negativeRatio: number;
+  growthRate: number;
+}
+
 export interface Topic {
   id: string;
   title: string;
@@ -55,6 +62,7 @@ export interface Topic {
   spreadAccounts: SpreadAccount[];
   narrativeAngles: NarrativeAngle[];
   eventTimeline: TimelineEvent[];
+  heatTrend: HeatTrendPoint[];
 }
 
 export interface DutyRecord {
@@ -73,6 +81,7 @@ export interface FilterParams {
   region: string;
   language: string;
   timeRange: string;
+  drillDown: "" | "rising" | "highRisk";
 }
 
 export interface DashboardStats {
